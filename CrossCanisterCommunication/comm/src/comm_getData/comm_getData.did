@@ -1,0 +1,1 @@
+service : { display_info : (principal, principal) -> (text) }

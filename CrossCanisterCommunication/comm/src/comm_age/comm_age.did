@@ -1,0 +1,1 @@
+service : { get_age : () -> (nat32) query; set_age : (nat32) -> () }

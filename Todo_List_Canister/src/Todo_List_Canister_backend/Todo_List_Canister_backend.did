@@ -1,0 +1,6 @@
+service : {
+  add_todo : (text, text) -> ();
+  get_todos : () -> (vec record { text; text; bool }) query;
+  toggle_todo : (nat64) -> ();
+  whoami : () -> (principal) query;
+}

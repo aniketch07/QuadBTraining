@@ -1,0 +1,27 @@
+{
+  "canisters": {
+    "ICP-Task1-backend": {
+      "candid": "src/ICP-Task1-backend/ICP-Task1-backend.did",
+      "package": "ICP-Task1-backend",
+      "type": "rust"
+    },
+    "ICP-Task1-frontend": {
+      "dependencies": [
+        "ICP-Task1-backend"
+      ],
+      "source": [
+        "src/ICP-Task1-frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "ICP-Task1-frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}

@@ -1,0 +1,27 @@
+{
+  "canisters": {
+    "Authentication_backend": {
+      "candid": "src/Authentication_backend/Authentication_backend.did",
+      "package": "Authentication_backend",
+      "type": "rust"
+    },
+    "Authentication_frontend": {
+      "dependencies": [
+        "Authentication_backend"
+      ],
+      "source": [
+        "src/Authentication_frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "Authentication_frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}

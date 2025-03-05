@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "src/persistentCounterCanister_backend"
+]
+resolver = "2"

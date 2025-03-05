@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "src/ICP-Task1-backend"
+]
+resolver = "2"

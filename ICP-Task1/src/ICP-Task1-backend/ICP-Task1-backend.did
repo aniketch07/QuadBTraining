@@ -1,0 +1,5 @@
+service : {
+  "get_profile": () -> (text, int32) query;
+  "set_profile": (text, int32) -> ();
+  "greet": (text, int32) -> (text) query;
+}

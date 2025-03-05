@@ -1,0 +1,37 @@
+{
+  "canisters": {
+    "comm_backend": {
+      "candid": "src/comm_backend/comm_backend.did",
+      "package": "comm_backend",
+      "type": "rust"
+    },
+    "comm_age": {
+      "candid": "src/comm_age/comm_age.did",
+      "package": "comm_age",
+      "type": "rust"
+    },
+    "comm_getData": {
+      "candid": "src/comm_getData/comm_getData.did",
+      "package": "comm_getData",
+      "type": "rust"
+    },
+    "comm_frontend": {
+      "dependencies": [
+        "comm_backend"
+      ],
+      "source": [
+        "src/comm_frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "comm_frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}

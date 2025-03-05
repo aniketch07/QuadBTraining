@@ -1,0 +1,27 @@
+{
+  "canisters": {
+    "persistentCounterCanister_backend": {
+      "candid": "src/persistentCounterCanister_backend/persistentCounterCanister_backend.did",
+      "package": "persistentCounterCanister_backend",
+      "type": "rust"
+    },
+    "persistentCounterCanister_frontend": {
+      "dependencies": [
+        "persistentCounterCanister_backend"
+      ],
+      "source": [
+        "src/persistentCounterCanister_frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "persistentCounterCanister_frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}

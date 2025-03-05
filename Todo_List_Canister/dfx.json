@@ -1,0 +1,38 @@
+{
+  "canisters": {
+    "Todo_List_Canister_backend": {
+      "candid": "src/Todo_List_Canister_backend/Todo_List_Canister_backend.did",
+      "package": "Todo_List_Canister_backend",
+      "type": "rust"
+    },
+    "Todo_List_Canister_frontend": {
+      "dependencies": [
+        "Todo_List_Canister_backend"
+      ],
+      "source": [
+        "src/Todo_List_Canister_frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "Todo_List_Canister_frontend"
+    },
+    "internet_identity": {
+      "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
+      "frontend": {},
+      "remote": {
+        "id": {
+          "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        }
+      },
+      "type": "custom",
+      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
