@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "src/Todo_auth_ICP_backend"
+]
+resolver = "2"

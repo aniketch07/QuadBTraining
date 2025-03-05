@@ -23,13 +23,3 @@ dist/
 
 # environment variables
 .env
-
-#ignored folders
-testing/
-test1/
-Calculator/
-votingApp/
-cycles_voting/
-ICP.txt
-TaskDapp/
-authTodo/

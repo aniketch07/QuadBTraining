@@ -1,0 +1,7 @@
+type Task = record { id : nat64; "principal" : principal; name : text };
+service : {
+  add_task : (text) -> (nat64);
+  delete_task : (nat64) -> ();
+  get_tasks : () -> (vec Task) query;
+  whoami : () -> (principal) query;
+}
