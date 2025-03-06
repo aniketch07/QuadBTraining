@@ -1,19 +1,19 @@
 use ic_cdk_macros::{query, update, init};
 use ic_cdk::api::{time, caller};
-use std::collections::HashMap;
-use std::cell::RefCell;
-use candid::{CandidType, Deserialize, Principal};
-use serde;
+use ic_stable_structures::{
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+    DefaultMemoryImpl, StableBTreeMap, Storable
+};
+use std::{borrow::Cow, collections::HashMap, cell::RefCell};
+use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use serde::{self, Serialize};
 
-// Store the deployer (owner) of the canister and poll data
-thread_local! {
-    static OWNER: RefCell<Option<Principal>> = RefCell::new(None);
-    static POLLS: RefCell<HashMap<u64, Poll>> = RefCell::new(HashMap::new());
-    static POLL_ID_COUNTER: RefCell<u64> = RefCell::new(0);
-}
+type Memory = VirtualMemory<DefaultMemoryImpl>;
+const OWNER_MEMORY_ID: MemoryId = MemoryId::new(0);
+const POLLS_MEMORY_ID: MemoryId = MemoryId::new(1);
+const POLL_ID_COUNTER_MEMORY_ID: MemoryId = MemoryId::new(2);
 
-// Poll structure
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Serialize, Clone)]
 struct Poll {
     question: String,
     description: String,
@@ -24,7 +24,32 @@ struct Poll {
     end_time: u64,
 }
 
-// Define structured errors manually
+thread_local! {
+    static MEMORY_MANAGER: MemoryManager<DefaultMemoryImpl> = MemoryManager::init(DefaultMemoryImpl::default());
+
+    static OWNER: RefCell<StableBTreeMap<u8, Principal, Memory>> =
+        RefCell::new(StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.get(OWNER_MEMORY_ID))));
+
+    static POLLS: RefCell<StableBTreeMap<u64, Poll, Memory>> =
+        RefCell::new(StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.get(POLLS_MEMORY_ID))));
+
+    static POLL_ID_COUNTER: RefCell<StableBTreeMap<u8, u64, Memory>> =
+        RefCell::new(StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.get(POLL_ID_COUNTER_MEMORY_ID))));
+}
+
+impl Storable for Poll {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(Encode!(self).unwrap())
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Decode!(bytes.as_ref(), Self).unwrap()
+    }
+
+    const BOUND: ic_stable_structures::storable::Bound =
+        ic_stable_structures::storable::Bound::Unbounded;
+}
+
 #[derive(CandidType, Deserialize, Debug)]
 pub enum PollError {
     Unauthorized,
@@ -41,20 +66,20 @@ pub enum PollError {
 fn init() {
     let caller = ic_cdk::caller();
     ic_cdk::println!("Initializing canister with owner: {}", caller);
-    OWNER.with(|owner| {
-        *owner.borrow_mut() = Some(caller);
-    });
+    
+    OWNER.with(|owner| owner.borrow_mut().insert(0, caller));
+    POLL_ID_COUNTER.with(|counter| counter.borrow_mut().insert(0, 0));
 }
 
 // Query to get the owner
 #[query]
 fn get_owner() -> Option<Principal> {
-    OWNER.with(|owner| *owner.borrow())
+    OWNER.with(|owner| owner.borrow().get(&0))
 }
 
 // Helper function to check if the caller is the owner
 fn is_owner() -> bool {
-    OWNER.with(|owner| *owner.borrow() == Some(caller()))
+    OWNER.with(|owner| owner.borrow().get(&0) == Some(caller()))
 }
 
 // Create a new poll (only the owner can call this)
@@ -70,27 +95,29 @@ fn create_poll(question: String, description: String, options: Vec<String>, dura
     let start_time = time() / 1_000_000_000;
     let end_time = start_time + duration_seconds;
 
-    POLL_ID_COUNTER.with(|counter| {
-        let mut id = counter.borrow_mut();
-        *id += 1;
+    let poll_id = POLL_ID_COUNTER.with(|counter| {
+        let mut counter = counter.borrow_mut();
+        let current_id = counter.get(&0).unwrap_or(0);
+        let new_id = current_id + 1;
+        counter.insert(0, new_id);
+        new_id
+    });
 
-        POLLS.with(|polls| {
-            polls.borrow_mut().insert(*id, Poll {
-                question,
-                description,
-                options: options.clone(),
-                votes: options.into_iter().map(|opt| (opt, 0)).collect(),
-                voters: HashMap::new(),
-                start_time,
-                end_time,
-            });
+    POLLS.with(|polls| {
+        polls.borrow_mut().insert(poll_id, Poll {
+            question,
+            description,
+            options: options.clone(),
+            votes: options.into_iter().map(|opt| (opt, 0)).collect(),
+            voters: HashMap::new(),
+            start_time,
+            end_time,
         });
+    });
 
-        Ok(*id)
-    })
+    Ok(poll_id)
 }
 
-// Vote on a poll
 #[update]
 fn vote(poll_id: u64, option: String) -> Result<String, PollError> {
     let now = time() / 1_000_000_000;
@@ -98,24 +125,26 @@ fn vote(poll_id: u64, option: String) -> Result<String, PollError> {
 
     POLLS.with(|polls| {
         let mut polls = polls.borrow_mut();
-        if let Some(p) = polls.get_mut(&poll_id) {
-            if now < p.start_time {
-                return Err(PollError::PollNotStarted);
-            }
-            if now >= p.end_time {
-                return Err(PollError::PollEnded);
-            }
-            if p.voters.contains_key(&user) {
-                return Err(PollError::AlreadyVoted);
-            }
-            if let Some(count) = p.votes.get_mut(&option) {
-                *count += 1;
-                p.voters.insert(user, option.clone());
-                return Ok(format!("Voted for '{}' in poll {}", option, poll_id));
-            }
-            return Err(PollError::InvalidOption);
+        let mut poll = polls.get(&poll_id).ok_or(PollError::NotFound)?;
+
+        if now < poll.start_time {
+            return Err(PollError::PollNotStarted);
         }
-        Err(PollError::NotFound)
+        if now >= poll.end_time {
+            return Err(PollError::PollEnded);
+        }
+        if poll.voters.contains_key(&user) {
+            return Err(PollError::AlreadyVoted);
+        }
+
+        if let Some(count) = poll.votes.get_mut(&option) {
+            *count += 1;
+            poll.voters.insert(user, option.clone());
+            polls.insert(poll_id, poll.clone());
+            Ok(format!("Voted for '{}' in poll {}", option, poll_id))
+        } else {
+            Err(PollError::InvalidOption)
+        }
     })
 }
 
@@ -140,7 +169,7 @@ fn get_results(poll_id: u64) -> Result<HashMap<String, i32>, PollError> {
             } else {
                 None
             }
-        }).ok_or(PollError::PollEnded) // Corrected the error response
+        }).ok_or(PollError::PollEnded)
     })
 }
 
@@ -164,10 +193,9 @@ fn get_winner(poll_id: u64) -> Result<String, PollError> {
 fn get_active_polls() -> Vec<u64> {
     let now = time() / 1_000_000_000;
     POLLS.with(|polls| {
-        polls.borrow()
-            .iter()
+        polls.borrow().iter()
             .filter(|(_, p)| now < p.end_time)
-            .map(|(&id, _)| id)
+            .map(|(id, _)| id)
             .collect()
     })
 }
