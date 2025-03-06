@@ -14,6 +14,7 @@ thread_local! {
 // Poll structure
 struct Poll {
     question: String,
+    description:String,
     options: Vec<String>,
     votes: HashMap<String, i32>,
     voters: HashMap<Principal, String>,
@@ -44,7 +45,7 @@ fn is_owner() -> bool {
 
 // Create a new poll (only the owner can call this)
 #[update]
-fn create_poll(question: String, options: Vec<String>, duration_seconds: u64) -> Result<u64, String> {
+fn create_poll(question: String, description:String,options: Vec<String>, duration_seconds: u64) -> Result<u64, String> {
     if !is_owner() {
         return Err("Error: Only the owner can create polls.".to_string());
     }
@@ -63,6 +64,7 @@ fn create_poll(question: String, options: Vec<String>, duration_seconds: u64) ->
         POLLS.with(|polls| {
             polls.borrow_mut().insert(*id, Poll {
                 question,
+                description,
                 options: options.clone(),
                 votes: options.into_iter().map(|opt| (opt, 0)).collect(),
                 voters: HashMap::new(),
