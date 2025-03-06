@@ -5,6 +5,7 @@ type PollError = variant {
   NotFound;
   PollEnded;
   InvalidOption;
+  PollStillOngoing;
   Unauthorized;
 };
 type Result = variant { Ok : nat64; Err : PollError };

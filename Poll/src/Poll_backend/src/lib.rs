@@ -56,6 +56,7 @@ pub enum PollError {
     EmptyOptions,
     NotFound,
     PollNotStarted,
+    PollStillOngoing,
     PollEnded,
     AlreadyVoted,
     InvalidOption,
@@ -169,7 +170,7 @@ fn get_results(poll_id: u64) -> Result<HashMap<String, i32>, PollError> {
             } else {
                 None
             }
-        }).ok_or(PollError::PollEnded)
+        }).ok_or(PollError::PollStillOngoing)
     })
 }
 
@@ -184,7 +185,7 @@ fn get_winner(poll_id: u64) -> Result<String, PollError> {
             } else {
                 None
             }
-        }).ok_or(PollError::PollEnded)
+        }).ok_or(PollError::PollStillOngoing)
     })
 }
 
