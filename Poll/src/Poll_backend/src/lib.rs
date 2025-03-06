@@ -2,7 +2,8 @@ use ic_cdk_macros::{query, update, init};
 use ic_cdk::api::{time, caller};
 use std::collections::HashMap;
 use std::cell::RefCell;
-use candid::Principal;
+use candid::{CandidType, Deserialize, Principal};
+use serde;
 
 // Store the deployer (owner) of the canister and poll data
 thread_local! {
@@ -12,9 +13,10 @@ thread_local! {
 }
 
 // Poll structure
+#[derive(CandidType, Deserialize)]
 struct Poll {
     question: String,
-    description:String,
+    description: String,
     options: Vec<String>,
     votes: HashMap<String, i32>,
     voters: HashMap<Principal, String>,
@@ -22,11 +24,23 @@ struct Poll {
     end_time: u64,
 }
 
+// Define structured errors manually
+#[derive(CandidType, Deserialize, Debug)]
+pub enum PollError {
+    Unauthorized,
+    EmptyOptions,
+    NotFound,
+    PollNotStarted,
+    PollEnded,
+    AlreadyVoted,
+    InvalidOption,
+}
+
 // Initialize the owner when the canister is deployed
 #[init]
 fn init() {
     let caller = ic_cdk::caller();
-    ic_cdk::println!("Initializing canister with owner: {}", caller); // Debug print
+    ic_cdk::println!("Initializing canister with owner: {}", caller);
     OWNER.with(|owner| {
         *owner.borrow_mut() = Some(caller);
     });
@@ -45,16 +59,15 @@ fn is_owner() -> bool {
 
 // Create a new poll (only the owner can call this)
 #[update]
-fn create_poll(question: String, description:String,options: Vec<String>, duration_seconds: u64) -> Result<u64, String> {
+fn create_poll(question: String, description: String, options: Vec<String>, duration_seconds: u64) -> Result<u64, PollError> {
     if !is_owner() {
-        return Err("Error: Only the owner can create polls.".to_string());
+        return Err(PollError::Unauthorized);
     }
-    
     if options.is_empty() {
-        return Err("Error: Poll must have at least one option.".to_string());
+        return Err(PollError::EmptyOptions);
     }
 
-    let start_time = time() / 1_000_000_000; // Convert nanoseconds to seconds
+    let start_time = time() / 1_000_000_000;
     let end_time = start_time + duration_seconds;
 
     POLL_ID_COUNTER.with(|counter| {
@@ -73,13 +86,13 @@ fn create_poll(question: String, description:String,options: Vec<String>, durati
             });
         });
 
-        Ok(*id) // Return poll ID
+        Ok(*id)
     })
 }
 
 // Vote on a poll
 #[update]
-fn vote(poll_id: u64, option: String) -> String {
+fn vote(poll_id: u64, option: String) -> Result<String, PollError> {
     let now = time() / 1_000_000_000;
     let user = caller();
 
@@ -87,43 +100,39 @@ fn vote(poll_id: u64, option: String) -> String {
         let mut polls = polls.borrow_mut();
         if let Some(p) = polls.get_mut(&poll_id) {
             if now < p.start_time {
-                return "Poll has not started yet.".to_string();
+                return Err(PollError::PollNotStarted);
             }
             if now >= p.end_time {
-                return "Poll has already ended.".to_string();
+                return Err(PollError::PollEnded);
             }
             if p.voters.contains_key(&user) {
-                return "Error: You have already voted in this poll.".to_string();
+                return Err(PollError::AlreadyVoted);
             }
             if let Some(count) = p.votes.get_mut(&option) {
                 *count += 1;
                 p.voters.insert(user, option.clone());
-                return format!("Voted for '{}' in poll {}", option, poll_id);
+                return Ok(format!("Voted for '{}' in poll {}", option, poll_id));
             }
-            return "Error: Invalid option.".to_string();
+            return Err(PollError::InvalidOption);
         }
-        "Error: Poll not found.".to_string()
+        Err(PollError::NotFound)
     })
 }
 
 // Get poll details
 #[query]
-fn get_poll(poll_id: u64) -> Option<(String, Vec<String>, u64, u64)> {
+fn get_poll(poll_id: u64) -> Result<(String, Vec<String>, u64, u64), PollError> {
     POLLS.with(|polls| {
-        polls.borrow().get(&poll_id).map(|p| (
-            p.question.clone(),
-            p.options.clone(),
-            p.start_time,
-            p.end_time,
-        ))
+        polls.borrow().get(&poll_id)
+            .map(|p| (p.question.clone(), p.options.clone(), p.start_time, p.end_time))
+            .ok_or(PollError::NotFound)
     })
 }
 
 // Get results (only after poll ends)
 #[query]
-fn get_results(poll_id: u64) -> Option<HashMap<String, i32>> {
+fn get_results(poll_id: u64) -> Result<HashMap<String, i32>, PollError> {
     let now = time() / 1_000_000_000;
-
     POLLS.with(|polls| {
         polls.borrow().get(&poll_id).and_then(|p| {
             if now >= p.end_time {
@@ -131,15 +140,14 @@ fn get_results(poll_id: u64) -> Option<HashMap<String, i32>> {
             } else {
                 None
             }
-        })
+        }).ok_or(PollError::PollEnded) // Corrected the error response
     })
 }
 
 // Get the winner (only after poll ends)
 #[query]
-fn get_winner(poll_id: u64) -> Option<String> {
+fn get_winner(poll_id: u64) -> Result<String, PollError> {
     let now = time() / 1_000_000_000;
-
     POLLS.with(|polls| {
         polls.borrow().get(&poll_id).and_then(|p| {
             if now >= p.end_time {
@@ -147,7 +155,7 @@ fn get_winner(poll_id: u64) -> Option<String> {
             } else {
                 None
             }
-        })
+        }).ok_or(PollError::PollEnded)
     })
 }
 
@@ -155,7 +163,6 @@ fn get_winner(poll_id: u64) -> Option<String> {
 #[query]
 fn get_active_polls() -> Vec<u64> {
     let now = time() / 1_000_000_000;
-
     POLLS.with(|polls| {
         polls.borrow()
             .iter()
