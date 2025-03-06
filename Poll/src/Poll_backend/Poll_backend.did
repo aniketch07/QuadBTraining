@@ -1,0 +1,10 @@
+type Result = variant { Ok : nat64; Err : text };
+service : () -> {
+  create_poll : (text, vec text, nat64) -> (Result);
+  get_active_polls : () -> (vec nat64) query;
+  get_owner : () -> (opt principal) query;
+  get_poll : (nat64) -> (opt record { text; vec text; nat64; nat64 }) query;
+  get_results : (nat64) -> (opt vec record { text; int32 }) query;
+  get_winner : (nat64) -> (opt text) query;
+  vote : (nat64, text) -> (text);
+}
